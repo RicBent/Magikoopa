@@ -23,7 +23,6 @@ moc_*.cpp
 moc_*.h
 qrc_*.cpp
 ui_*.h
-Makefile*
 *build-*
 
 # QtCreator
@@ -41,3 +40,7 @@ CMakeLists.txt.user*
 
 # Build folder
 build/
+
+# Stuff that should never end up online
+code.bin
+exheader.bin
