@@ -151,17 +151,24 @@
    </property>
    <widget class="QMenu" name="menuFile">
     <property name="title">
-     <string>Fi&amp;le</string>
+     <string>&amp;File</string>
     </property>
     <addaction name="separator"/>
     <addaction name="actionSet_Working_Directory"/>
     <addaction name="actionQuit"/>
    </widget>
+   <widget class="QMenu" name="menuSettings">
+    <property name="title">
+     <string>Setti&amp;ngs</string>
+    </property>
+    <addaction name="actionSetEditor"/>
+   </widget>
    <addaction name="menuFile"/>
+   <addaction name="menuSettings"/>
   </widget>
   <action name="actionSet_Working_Directory">
    <property name="text">
-    <string>&amp;Set Working Directory</string>
+    <string>Set &amp;Working Directory</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+O</string>
@@ -173,6 +180,11 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+Q</string>
+   </property>
+  </action>
+  <action name="actionSetEditor">
+   <property name="text">
+    <string>Set &amp;Text Editor...</string>
    </property>
   </action>
  </widget>

@@ -5,6 +5,8 @@
 #include <QPushButton>
 #include <QListWidgetItem>
 #include <QLabel>
+#include <QMessageBox>
+#include <QInputDialog>
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -12,6 +14,10 @@ MainWindow::MainWindow(QWidget *parent) :
     m_issueCount(0)
 {
     ui->setupUi(this);
+
+    settings = new QSettings("Blarg City", "Magikoopa");
+    loadSettings();
+
     patchMaker = new PatchMaker(this);
     connect(patchMaker, SIGNAL(setBusy(bool)), SLOT(setActionsDisabled(bool)));
     connect(patchMaker, SIGNAL(addOutput(QString,QString,bool)), this, SLOT(appendOutput(QString,QString,bool)));
@@ -22,6 +28,9 @@ MainWindow::MainWindow(QWidget *parent) :
 
 MainWindow::~MainWindow()
 {
+    saveSettings();
+    delete settings;
+
     delete ui;
 }
 
@@ -78,10 +87,21 @@ void MainWindow::addIssue(QString text, IssueType type)
     if (locSegs.count() < 2) return;
     QString path = locSegs.at(0);
     int line = locSegs.at(1).toInt();
+    int column = 0;
+
+    if (locSegs.count() >= 3)
+    {
+        bool ok;
+        int column_ = locSegs.at(2).toInt(&ok);
+        if (ok) column = column_;
+    }
 
     QString message = text.mid(text.indexOf(' ', index+1));
 
     QListWidgetItem* item = new QListWidgetItem(QIcon(iconPath), QString("%1\n%2, Line %3").arg(message).arg(path).arg(line));
+    item->setData(Qt::UserRole, path);
+    item->setData(Qt::UserRole + 1, line);
+    item->setData(Qt::UserRole + 2, column);
 
     ui->issues->addItem(item);
 
@@ -126,4 +146,64 @@ void MainWindow::on_makeCleanButton_clicked()
 void MainWindow::on_actionQuit_triggered()
 {
     this->close();
+}
+
+// Open Issue in text editor if it is valid
+void MainWindow::on_issues_doubleClicked(const QModelIndex& index)
+{
+    QString commandString = settings->value("textEditorCmd", "").toString();
+    if (commandString == "")
+    {
+        QMessageBox::information(this, "Magikoopa", "You have to set the editor to be able to jump to issues:\n\nSettings -> Set Text Editor", QMessageBox::Ok);
+        return;
+    }
+
+    QString path = ui->issues->model()->data(index, Qt::UserRole).toString();
+
+    if (path.isEmpty())
+        return;
+
+    qint32 line = ui->issues->model()->data(index, Qt::UserRole + 1).toInt();
+    qint32 column = ui->issues->model()->data(index, Qt::UserRole + 2).toInt();
+
+    commandString.replace("%path%", path);
+    commandString.replace("%line%", QString::number(line));
+    commandString.replace("%column%", QString::number(column));
+
+    int idx = commandString.indexOf(" ");
+    QString command = commandString.left(idx);
+
+    commandString = commandString.mid(idx+1);
+
+    QStringList args = commandString.split(" ", QString::SkipEmptyParts);
+
+    QProcess* textEditor = new QProcess(this);
+    textEditor->startDetached(command, args);
+}
+
+
+//
+// Settings Related
+//
+
+void MainWindow::loadSettings()
+{
+
+}
+
+void MainWindow::saveSettings()
+{
+
+}
+
+void MainWindow::on_actionSetEditor_triggered()
+{
+    QString oldEditor = settings->value("textEditorCmd", "").toString();
+    bool ok;
+    QString newEditor = QInputDialog::getText(this, "Magikoopa",
+                                              "Enter a command that opens a text editor:\n\nAvailable variables: %path% %line% %column%\n",
+                                              QLineEdit::Normal, oldEditor, &ok);
+
+    if (ok)
+        settings->setValue("textEditorCmd", newEditor);
 }

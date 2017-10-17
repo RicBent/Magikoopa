@@ -4,6 +4,7 @@
 #include "patchmaker.h"
 
 #include <QMainWindow>
+#include <QSettings>
 
 namespace Ui {
 class MainWindow;
@@ -30,6 +31,10 @@ private slots:
 
     void on_actionQuit_triggered();
 
+    void on_issues_doubleClicked(const QModelIndex &index);
+
+    void on_actionSetEditor_triggered();
+
 private:
     Ui::MainWindow* ui;
 
@@ -45,6 +50,10 @@ private:
     int m_issueCount;
 
     void clearIssues();
+
+    QSettings* settings;
+    void loadSettings();
+    void saveSettings();
 };
 
 #endif // MAINWINDOW_H
