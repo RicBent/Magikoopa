@@ -126,12 +126,19 @@ void PatchMaker::compilerDone(int exitCode)
         {
             emit updateStatus("Running Make (Loader)...");
 
-            QFile codesizeFile(m_path + "/loader/source/codesize.h");
-            codesizeFile.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate);
-            QTextStream out(&codesizeFile);
-            out << "#ifndef CODESIZE\n"
-                << QString("#define CODESIZE 0x%1\n").arg(QFile(m_path + "/newcode.bin").size(), 8, 0x10, QChar('0'));
-            codesizeFile.close();
+            // Export Header File
+            QFile newcodeinfoFile(m_path + "/loader/source/newcodeinfo.h");
+            newcodeinfoFile.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate);
+            QTextStream out(&newcodeinfoFile);
+            out << "#ifndef NEWCODEINFO_H\n"
+                << "#define NEWCODEINFO_H\n"
+                << "\n"
+                << QString("#define NEWCODE_OFFSET 0x%1\n").arg(m_newCodeOffset, 8, 0x10, QChar('0'))
+                << QString("#define NEWCODE_SIZE 0x%1\n").arg(QFile(m_path + "/newcode.bin").size(), 8, 0x10, QChar('0'))
+                << "\n"
+                << "#endif // NEWCODEINFO_H\n";
+            newcodeinfoFile.close();
+            // TODO: NEWCODE_SIZE this may be too small if we go for hooks that create a little codeblock that is appended
 
             QFile newcodeFile(m_path + "/newcode.bin");
             m_loaderDataOffset = m_newCodeOffset + ((newcodeFile.size() + 0xF) & ~0xF);
@@ -221,11 +228,6 @@ void PatchMaker::insert()
 
     quint32 oldCodeSize = codeFile->size();
     codeFile->resize(loaderDataEnd - 0x100000);
-    codeFile->seek(oldCodeSize);
-
-    // Clear BSS section
-    while (codeFile->pos() < m_newCodeOffset - 0x100000)
-        codeFile->write8(0);
 
     // Insert Loader Text
     quint32 loaderTextSize = loaderTextEnd - m_loaderOffset;
@@ -235,6 +237,19 @@ void PatchMaker::insert()
     codeFile->seek(m_loaderOffset - 0x100000);
     codeFile->writeData(loaderText, loaderTextSize);
     delete loaderText;
+
+    // Clear BSS section
+    codeFile->seek(oldCodeSize);
+    while (codeFile->pos() < m_newCodeOffset - 0x100000)
+        codeFile->write8(0);
+
+    // Insert NewCode
+    quint8* newCode = new quint8[newCodeFile->size()];
+    newCodeFile->seek(0);
+    newCodeFile->readData(newCode, newCodeFile->size());
+    codeFile->seek(m_newCodeOffset - 0x100000);
+    codeFile->writeData(newCode, newCodeFile->size());
+    delete[] newCode;
 
     // Clear Padding to Loader Data
     while (codeFile->pos() < loaderDataStart - 0x100000)
@@ -246,19 +261,36 @@ void PatchMaker::insert()
     loaderFile->seek(loaderDataStart - m_loaderOffset);
     loaderFile->readData(loaderData, loaderDataSize);
     codeFile->seek(loaderDataStart - 0x100000);
-    qDebug() << QString::number(loaderDataStart, 0x10);
-    qDebug() << QString::number(m_loaderOffset, 0x10);
-    qDebug() << QString::number(loaderDataStart - m_loaderOffset, 0x10);
     codeFile->writeData(loaderData, loaderDataSize);
 
+    quint32 nextPageOffset = (codeFile->pos() + 0xFFF) & ~0xFFF;
+    while (codeFile->pos() < nextPageOffset)
+        codeFile->write8(0);
+
+    qDebug() << QString("Loader Text Start: %1").arg(m_loaderOffset, 8, 0x10, QChar('0')).toLatin1().data();
+    qDebug() << QString("Loader Text End:   %1").arg(loaderTextEnd, 8, 0x10, QChar('0')).toLatin1().data();
+    qDebug() << QString("Loader Text Size:  %1").arg(loaderTextSize, 8, 0x10, QChar('0')).toLatin1().data();
+    qDebug() << QString("Loader Data Start: %1").arg(loaderDataStart, 8, 0x10, QChar('0')).toLatin1().data();
+    qDebug() << QString("Loader Data End:   %1").arg(loaderDataEnd, 8, 0x10, QChar('0')).toLatin1().data();
+    qDebug() << QString("Loader Data Size:  %1").arg(loaderDataSize, 8, 0x10, QChar('0')).toLatin1().data();
+    qDebug() << "";
+    qDebug() << QString("New Code Start: %1").arg(m_newCodeOffset, 8, 0x10, QChar('0')).toLatin1().data();
+    qDebug() << QString("New Code End:   %1").arg(m_newCodeOffset + newCodeFile->size(), 8, 0x10, QChar('0')).toLatin1().data();
+    qDebug() << QString("New Code Size:  %1").arg(newCodeFile->size(), 8, 0x10, QChar('0')).toLatin1().data();
+
     // Make a nice hook? to loader
-    //quint32 asdf = makeBranchOpcode(0x00100000, loaderMainAddr, true);
-    //codeFile->seek(0x00100000 - 0x100000);
-    //codeFile->write32(asdf);
+    quint32 asdf = makeBranchOpcode(0x00100000, loaderMainAddr, true);
+    codeFile->seek(0x00100000 - 0x100000);
+    codeFile->write32(asdf);
 
-    // Insert New Code
 
-    // Do hooks 'n stuff
+    // Make repls/nsubs/hooks/etc
+
+    // Test Zone Start
+    asdf = makeBranchOpcode(0x002DDB38, 0x006c5000, true);
+    codeFile->seek(0x002DDB38 - 0x100000);
+    codeFile->write32(asdf);
+    // Test Zone End
 
     codeFile->save();
     codeFile->close();
@@ -285,6 +317,70 @@ void PatchMaker::fixExheader(quint32 newCodeSize)
     exHeader.data.sci.dataCodeSetInfo.size = exHeader.data.sci.dataCodeSetInfo.physicalRegionSize << 12;
 
     exHeader.data.sci.bssSize = 0;
+
+
+    // Set ARM11 Kernel Caps
+    Exheader::ACI* aci = &exHeader.data.aci1;
+
+    QList<quint32> otherCaps;
+
+    bool svcs[0x100];
+    memset(&svcs, 0, sizeof(svcs));
+
+    for (int i = 0; i < 28; i++)
+    {
+        quint32 cap = aci->arm11kernelCaps.desciptors[i];
+
+        if ((cap & 0xF8000000) == 0xF0000000)
+        {
+            quint32 mask = cap & 0x00FFFFFF;
+            quint32 tableIndex = (cap & 0x03000000) >> 24;
+
+            for (int i = 0; i < 24; i++)
+            {
+                if (mask & (1 << i))
+                {
+                    quint32 svc = tableIndex*24 + i;
+                    if (svc < 0x100)
+                        svcs[svc] = true;
+                }
+            }
+        }
+        else if (cap != 0xFFFFFFFF)
+            otherCaps.append(cap);
+    }
+
+    // Allow SVC 0x70: ControlProcessMemory
+    svcs[0x70] = true;
+    QList<quint32> caps;
+
+    for (int i = 0; i < 8; i++)
+    {
+        quint32 newCap = 0xF0000000;
+        newCap |= i << 24;
+
+        for (int j = 0; j < 24; j++)
+            newCap |= svcs[i*24 + j] << j;
+
+        if (newCap & 0x00FFFFFF)
+            caps.append(newCap);
+    }
+
+    caps.append(otherCaps);
+
+    if (caps.count() > 28)
+    {
+        emit setBusy(false);
+        emit updateStatus("Setting ARM11 LSCs failed");
+        return;
+    }
+
+    int i = 0;
+    for (; i < caps.size(); i++)
+        aci->arm11kernelCaps.desciptors[i] = caps[i];
+    for (; i < caps.size(); i++)
+        aci->arm11kernelCaps.desciptors[i] = 0xFFFFFFFF;
+
 
     exHeader.save();
 

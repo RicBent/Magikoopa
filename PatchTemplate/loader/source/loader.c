@@ -1,3 +1,10 @@
+/*
+ *   This header file is automatically generated and has these two defines:
+ *    - NEWCODE_OFFSET: The offset of the custom code
+ *    - NEWCODE_SIZE: The size of the custom code
+ */
+#include "newcodeinfo.h"
+
 typedef unsigned int u32;
 typedef u32 Handle;
 typedef u32 Result;
@@ -13,9 +20,8 @@ void LoaderMain()
 {
     Result res;
     
-    // TODO: Get these addresses from a generated file
-    u32 address =       0x006C5000;
-    u32 neededMemory =  0x00001000;
+    u32 address = NEWCODE_OFFSET;
+    u32 neededMemory =  (NEWCODE_SIZE + 0xFFF) & ~0xFFF;    // Dunno if rounding this up is needed
 
     res = svcControlProcessMemory(getCurrentProcessHandle(), address, address, neededMemory, 6, 7);
     

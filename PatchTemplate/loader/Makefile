@@ -165,7 +165,6 @@ $(OUTPUT).sym : $(OUTPUT).elf
 #---------------------------------------------------------------------------------
 %.elf: $(OFILES)
 	@echo generating linker script
-	# TODO: Check if this works on Windows/macOS
 	echo "$$LINKERSCRIPT_TEMPLATE" > $(LINKERSCRIPT)
 	
 	@echo linking $(notdir $@)
