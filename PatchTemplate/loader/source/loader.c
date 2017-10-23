@@ -1,13 +1,10 @@
-/*
- *   This header file is automatically generated and has these two defines:
- *    - NEWCODE_OFFSET: The offset of the custom code
- *    - NEWCODE_SIZE: The size of the custom code
- */
-#include "newcodeinfo.h"
+#include "newcodeinfo.h"    // Automatically generated
 
-typedef unsigned int u32;
+typedef signed int      s32;
+typedef unsigned int    u32;
+
+typedef s32 Result;
 typedef u32 Handle;
-typedef u32 Result;
 
 Result svcOpenProcess(Handle* process, u32 processId);
 Result svcGetProcessId(u32* out, Handle handle);

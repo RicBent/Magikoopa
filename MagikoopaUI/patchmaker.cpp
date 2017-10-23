@@ -11,6 +11,7 @@
 #include "Filesystem/filesystem.h"
 #include "exheader.h"
 
+
 static const QStringList requiredFiles =
 {
     "Makefile", "loader/Makefile", "code.bin", "exheader.bin"
@@ -29,6 +30,9 @@ PatchMaker::PatchMaker(QObject* parent) :
 
     connect(loaderCompiler, SIGNAL(outputUpdate(QString)), this, SLOT(onLoaderCompilerOutput(QString)));
     connect(compiler, SIGNAL(outputUpdate(QString)), this, SLOT(onCompilerOutput(QString)));
+
+    connect(&m_hookLinker, SIGNAL(outputUpdate(QString)), this, SLOT(onHookLinkerOutput(QString)));
+    connect(&m_loaderHookLinker, SIGNAL(outputUpdate(QString)), this, SLOT(onLoaderHookLinkerOutput(QString)));
 
     emit setBusy(false);
 }
@@ -106,12 +110,30 @@ void PatchMaker::loaderCompilerDone(int exitCode)
 
     else if (loaderCompiler->lastAction() == PatchCompiler::CompilerAction_Make)
     {
-        if (exitCode == 0) insert();
-        else
+        if (exitCode != 0)
         {
             emit updateStatus("Compilation Failed (Loader)");
             emit setBusy(false);
+            return;
         }
+
+        m_loaderSymTable.clear();
+        m_loaderSymTable.load(m_path + "/loader/loader.sym");
+
+        m_loaderHookLinker.clear();
+        m_loaderHookLinker.setSymTable(&m_loaderSymTable);
+        m_loaderHookLinker.loadHooks(m_path + "/loader/source");
+
+        quint32 loaderInsertSize = QFile(m_path + "/loader/loader.bin").size() + m_loaderHookLinker.extraDataSize();
+        if (loaderInsertSize > m_loaderMaxSize)
+        {
+            emit updateStatus("Loader text size exeeds maximum");
+            emit setBusy(false);
+            return;
+        }
+
+        insert();
+
     }
 }
 
@@ -124,6 +146,13 @@ void PatchMaker::compilerDone(int exitCode)
     {
         if (exitCode == 0)
         {
+            m_symTable.clear();
+            m_symTable.load(m_path + "/newcode.sym");
+
+            m_hookLinker.clear();
+            m_hookLinker.setSymTable(&m_symTable);
+            m_hookLinker.loadHooks(m_path + "/source");
+
             emit updateStatus("Running Make (Loader)...");
 
             // Export Header File
@@ -134,11 +163,10 @@ void PatchMaker::compilerDone(int exitCode)
                 << "#define NEWCODEINFO_H\n"
                 << "\n"
                 << QString("#define NEWCODE_OFFSET 0x%1\n").arg(m_newCodeOffset, 8, 0x10, QChar('0'))
-                << QString("#define NEWCODE_SIZE 0x%1\n").arg(QFile(m_path + "/newcode.bin").size(), 8, 0x10, QChar('0'))
+                << QString("#define NEWCODE_SIZE 0x%1\n").arg(QFile(m_path + "/newcode.bin").size() + m_hookLinker.extraDataSize(), 8, 0x10, QChar('0'))
                 << "\n"
                 << "#endif // NEWCODEINFO_H\n";
             newcodeinfoFile.close();
-            // TODO: NEWCODE_SIZE this may be too small if we go for hooks that create a little codeblock that is appended
 
             QFile newcodeFile(m_path + "/newcode.bin");
             m_loaderDataOffset = m_newCodeOffset + ((newcodeFile.size() + 0xF) & ~0xF);
@@ -153,64 +181,15 @@ void PatchMaker::compilerDone(int exitCode)
     }
 }
 
-void checkListForSymVar(quint32* var, bool* foundVar, QStringList* segs, const QString& name)
-{
-    if (*foundVar)
-        return;
-
-    if (segs->at(segs->count()-1) == name)
-    {
-        bool ok;
-        *var = segs->at(0).toUInt(&ok, 0x10);
-        if (!ok) return;
-        else
-        {
-            *foundVar = true;
-            return;
-        }
-    }
-}
-
 void PatchMaker::insert()
 {
     emit updateStatus("Inserting...");
 
-    // Get LoaderMain address + __text_end
-    QFile loaderSymFile(m_path + "/loader/loader.sym");
-    loaderSymFile.open(QIODevice::ReadOnly | QIODevice::Text);
-    QTextStream loaderSym(&loaderSymFile);
-
-    quint32 loaderMainAddr;
-    quint32 loaderTextEnd;
-    quint32 loaderDataStart;
-    quint32 loaderDataEnd;
-
-    bool loaderMainAddrFound = false;
-    bool loaderTextEndFound = false;
-    bool loaderDataStartFound = false;
-    bool loaderDataEndFound = false;
-
-    while (!loaderSym.atEnd())
-    {
-        QString line = loaderSym.readLine();
-        QStringList segs = line.split(" ");
-        if (segs.count() < 2)
-            continue;
-
-        checkListForSymVar(&loaderMainAddr, &loaderMainAddrFound, &segs, "LoaderMain");
-        checkListForSymVar(&loaderTextEnd, &loaderTextEndFound, &segs, "__text_end");
-        checkListForSymVar(&loaderDataStart, &loaderDataStartFound, &segs, "__data_start");
-        checkListForSymVar(&loaderDataEnd, &loaderDataEndFound, &segs, "__data_end");
-    }
-    loaderSymFile.close();
-
-    if (!loaderMainAddrFound)
-    {
-        emit updateStatus("LoaderMain not found");
-        emit setBusy(false);
-        return;
-    }
-    else if (!loaderTextEndFound || !loaderDataStartFound || !loaderDataEndFound)
+    bool ok0, ok1, ok2;
+    quint32 loaderTextEnd = m_loaderSymTable.get("__text_end", &ok0);
+    quint32 loaderDataStart = m_loaderSymTable.get("__data_start", &ok1);
+    quint32 loaderDataEnd = m_loaderSymTable.get("__data_end", &ok2);
+    if (!ok0 || !ok1 || !ok2)
     {
         emit updateStatus("Parsing Loader sections failed");
         emit setBusy(false);
@@ -227,7 +206,7 @@ void PatchMaker::insert()
     newCodeFile->open();
 
     quint32 oldCodeSize = codeFile->size();
-    codeFile->resize(loaderDataEnd - 0x100000);
+    codeFile->resize(loaderDataEnd + m_hookLinker.extraDataSize() - 0x100000);
 
     // Insert Loader Text
     quint32 loaderTextSize = loaderTextEnd - m_loaderOffset;
@@ -278,19 +257,17 @@ void PatchMaker::insert()
     qDebug() << QString("New Code End:   %1").arg(m_newCodeOffset + newCodeFile->size(), 8, 0x10, QChar('0')).toLatin1().data();
     qDebug() << QString("New Code Size:  %1").arg(newCodeFile->size(), 8, 0x10, QChar('0')).toLatin1().data();
 
-    // Make a nice hook? to loader
-    quint32 asdf = makeBranchOpcode(0x00100000, loaderMainAddr, true);
-    codeFile->seek(0x00100000 - 0x100000);
-    codeFile->write32(asdf);
 
+    // Hooks
+    // Won't print ever but w/e
+    emit updateStatus("Hooking...");
 
-    // Make repls/nsubs/hooks/etc
+    m_hookLinker.setExtraDataptr(loaderDataEnd);
+    m_loaderHookLinker.setExtraDataptr(loaderTextEnd);
 
-    // Test Zone Start
-    asdf = makeBranchOpcode(0x002DDB38, 0x006c5000, true);
-    codeFile->seek(0x002DDB38 - 0x100000);
-    codeFile->write32(asdf);
-    // Test Zone End
+    m_hookLinker.applyTo(codeFile);
+    m_loaderHookLinker.applyTo(codeFile);
+
 
     codeFile->save();
     codeFile->close();
@@ -437,4 +414,14 @@ void PatchMaker::onLoaderCompilerOutput(const QString& text)
 void PatchMaker::onCompilerOutput(const QString& text)
 {
     emit addOutput("Compiler", text, false);
+}
+
+void PatchMaker::onHookLinkerOutput(const QString& text)
+{
+    emit addOutput("Hook Linker", text, false);
+}
+
+void PatchMaker::onLoaderHookLinkerOutput(const QString& text)
+{
+    emit addOutput("Loader Hook Linker", text, false);
 }

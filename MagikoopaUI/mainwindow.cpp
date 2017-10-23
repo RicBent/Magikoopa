@@ -14,6 +14,7 @@ MainWindow::MainWindow(QWidget *parent) :
     m_issueCount(0)
 {
     ui->setupUi(this);
+    setWindowIcon(QIcon(QCoreApplication::applicationDirPath() + "/magikoopa_data/icons/icon.png"));
 
     settings = new QSettings("Blarg City", "Magikoopa");
     loadSettings();
@@ -76,7 +77,7 @@ void MainWindow::appendOutput(const QString& catergory, const QString& text, boo
 
 void MainWindow::addIssue(QString text, IssueType type)
 {
-    QString iconPath = QCoreApplication::applicationDirPath() + "/3dsPatcher_data/icons/";
+    QString iconPath = QCoreApplication::applicationDirPath() + "/magikoopa_data/icons/";
     if (type == Warning) iconPath += "warning.png";
     else if (type == Error) iconPath += "error.png";
 

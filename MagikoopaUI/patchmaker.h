@@ -1,9 +1,15 @@
 #ifndef PATCHMAKER_H
 #define PATCHMAKER_H
 
+//
+// TODO: Clean this mess up when we are done with this
+//
+
 #include <QObject>
 
 #include "patchcompiler.h"
+#include "hooklinker.h"
+#include "symtable.h"
 
 class PatchMaker : public QObject
 {
@@ -32,6 +38,9 @@ private slots:
     void onLoaderCompilerOutput(const QString& text);
     void onCompilerOutput(const QString& text);
 
+    void onHookLinkerOutput(const QString& text);
+    void onLoaderHookLinkerOutput(const QString& text);
+
 private:
     void checkBackup();
     void restoreFromBackup();
@@ -47,6 +56,12 @@ private:
 
     PatchCompiler* loaderCompiler;
     PatchCompiler* compiler;
+
+    HookLinker m_hookLinker;
+    HookLinker m_loaderHookLinker;
+
+    SymTable m_symTable;
+    SymTable m_loaderSymTable;
 
     quint32 m_loaderOffset;
     quint32 m_loaderMaxSize;

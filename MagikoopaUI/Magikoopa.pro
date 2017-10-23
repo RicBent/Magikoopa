@@ -35,7 +35,10 @@ SOURCES += \
     Filesystem/yaz0file.cpp \
     exheader.cpp \
     patchmaker.cpp \
-    patchcompiler.cpp
+    patchcompiler.cpp \
+    symtable.cpp \
+    hooklinker.cpp \
+    hooks.cpp
 
 HEADERS += \
         mainwindow.h \
@@ -49,11 +52,15 @@ HEADERS += \
     Filesystem/memoryfile.h \
     Filesystem/plainarchive.h \
     Filesystem/sarcfilesystem.h \
-    Filesystem/version.h \
     Filesystem/yaz0file.h \
     exheader.h \
     patchmaker.h \
-    patchcompiler.h
+    patchcompiler.h \
+    symtable.h \
+    hooklinker.h \
+    hooks.h
 
 FORMS += \
         mainwindow.ui
+
+LIBS += -lyaml-cpp
