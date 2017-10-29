@@ -1,5 +1,5 @@
 LoaderEntryPoint:
     type:   softbranch
-    insert: pre
+    opcode: post
     func:   LoaderMain
     addr:   0x00100000

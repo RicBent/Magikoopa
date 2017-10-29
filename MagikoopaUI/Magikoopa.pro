@@ -62,5 +62,3 @@ HEADERS += \
 
 FORMS += \
         mainwindow.ui
-
-LIBS += -lyaml-cpp

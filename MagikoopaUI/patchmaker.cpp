@@ -175,7 +175,7 @@ void PatchMaker::compilerDone(int exitCode)
         }
         else
         {
-            emit updateStatus("Compilation Failed (Loader)");
+            emit updateStatus("Compilation Failed");
             emit setBusy(false);
         }
     }

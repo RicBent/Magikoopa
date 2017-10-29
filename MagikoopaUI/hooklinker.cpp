@@ -13,8 +13,10 @@ Hook* HookLinker::hookFromInfo(HookInfo* info)
 
     if (type == "branch")
         return new BranchHook(this, info);
-    if (type == "softbranch" || type == "soft_branch")
+    else if (type == "softbranch" || type == "soft_branch")
         return new SoftBranchHook(this, info);
+    else if (type == "patch")
+        return new PatchHook(this, info);
     else
         throw new HookExeption(info, QString("Invalid type \"%1\"").arg(type));
 

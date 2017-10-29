@@ -55,8 +55,20 @@ public:
     quint32 extraDataSize() { return 5*4; }
 
 private:
-    bool m_insertPre;
+    enum Opcode_Pos { Opcode_Ignore, Opcode_Pre, Opcode_Post };
+
+    Opcode_Pos m_opcodePos;
     quint32 m_destination;
+};
+
+class PatchHook : public Hook
+{
+public:
+    PatchHook(HookLinker* parent, HookInfo* info);
+    void writeData(FileBase* file, quint32 extraDataPos);
+
+private:
+    QByteArray m_patchData;
 };
 
 #endif // HOOKS_H

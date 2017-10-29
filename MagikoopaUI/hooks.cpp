@@ -138,18 +138,20 @@ SoftBranchHook::SoftBranchHook(HookLinker* parent, HookInfo* info)
             throw new HookExeption(info, QString("Invalid branch destination \"%1\"").arg(info->get("dest")));
     }
 
-    if (info->has("insert"))
+    if (info->has("opcode"))
     {
-        QString insertModeStr = info->get("insert").toLower();
-        if (insertModeStr == "pre")
-            m_insertPre = true;
-        else if (insertModeStr == "pre")
-            m_insertPre = false;
+        QString opcodePosStr = info->get("opcode").toLower();
+        if (opcodePosStr == "pre")
+            m_opcodePos = Opcode_Pre;
+        else if (opcodePosStr == "post")
+            m_opcodePos = Opcode_Post;
+        else if (opcodePosStr == "ignore")
+            m_opcodePos = Opcode_Ignore;
         else
-            throw new HookExeption(info, QString("Invalid softHook insert mode \"%1\"").arg(info->get("insert")));
+            throw new HookExeption(info, QString("Invalid softHook opcode position \"%1\"").arg(info->get("opcode")));
     }
     else
-        m_insertPre = false;
+        m_opcodePos = Opcode_Ignore;
 }
 
 void SoftBranchHook::writeData(FileBase* file, quint32 extraDataPtr)
@@ -160,11 +162,34 @@ void SoftBranchHook::writeData(FileBase* file, quint32 extraDataPtr)
     file->write32(makeBranchOpcode(m_address, extraDataPtr, false));
 
     file->seek(extraDataPtr - 0x00100000);
-    if (!m_insertPre) file->write32(offsetOpcode(originalOpcode, m_address, file->pos() + 0x00100000));
+    if (m_opcodePos == Opcode_Pre) file->write32(offsetOpcode(originalOpcode, m_address, file->pos() + 0x00100000));
     file->write32(0xE92D5FFF);      //push {r0-r12, r14}
     file->write32(makeBranchOpcode(file->pos() + 0x00100000, m_destination, true));
     file->write32(0xE8BD5FFF);      //pop {r0-r12, r14}
-    if (m_insertPre) file->write32(offsetOpcode(originalOpcode, m_address, file->pos() + 0x00100000));
+    if (m_opcodePos == Opcode_Post) file->write32(offsetOpcode(originalOpcode, m_address, file->pos() + 0x00100000));
     file->write32(makeBranchOpcode(file->pos() + 0x00100000, m_address + 4, false));
 }
 
+
+PatchHook::PatchHook(HookLinker* parent, HookInfo* info)
+{
+    base(parent, info);
+
+    if (!info->has("data"))
+        throw new HookExeption(info, "No patch data given");
+
+    QString dataStr = info->get("data").toLower();
+    if (dataStr.startsWith("0x"))
+        dataStr = dataStr.mid(2);
+
+    dataStr.replace(' ',  "");
+    dataStr.replace('\t', "");
+
+    m_patchData = QByteArray::fromHex(dataStr.toLatin1());
+}
+
+void PatchHook::writeData(FileBase* file, quint32)
+{
+    file->seek(m_address - 0x00100000);
+    file->writeData((quint8*)m_patchData.data(), m_patchData.size());
+}
