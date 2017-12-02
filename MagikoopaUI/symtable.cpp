@@ -1,6 +1,5 @@
 #include "symtable.h"
 
-#include <QDebug>
 #include <QFile>
 #include <QTextStream>
 

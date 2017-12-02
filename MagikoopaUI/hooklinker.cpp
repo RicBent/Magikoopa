@@ -17,6 +17,8 @@ Hook* HookLinker::hookFromInfo(HookInfo* info)
         return new SoftBranchHook(this, info);
     else if (type == "patch")
         return new PatchHook(this, info);
+    else if (type == "symptr" || type == "sym_ptr")
+        return new SymbolAddrPatchHook(this, info);
     else
         throw new HookExeption(info, QString("Invalid type \"%1\"").arg(type));
 

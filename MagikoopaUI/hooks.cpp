@@ -1,8 +1,6 @@
 #include "hooks.h"
 #include "hooklinker.h"
 
-#include <QDebug>
-
 quint32 Hook::makeBranchOpcode(quint32 src, quint32 dest, bool link)
 {
     quint32 ret = 0xEA000000;
@@ -37,8 +35,6 @@ quint32 Hook::offsetOpcode(quint32 opcode, quint32 orgPosition, qint32 newPositi
         quint32 dest = orgPosition + oldOffset;
 
         qint32 newOffset = (dest / 4) - (newPosition / 4) - 2;
-
-        // qDebug() << QString("%1 %2 %3 %4").arg(opcode, 8, 0x10, QChar('0')).arg(oldOffset, 8, 0x10, QChar('0')).arg(dest, 8, 0x10, QChar('0')).arg(newOffset, 8, 0x10, QChar('0'));
 
         fixedOpcode |= newOffset & 0x00FFFFFF;
     }
@@ -192,4 +188,27 @@ void PatchHook::writeData(FileBase* file, quint32)
 {
     file->seek(m_address - 0x00100000);
     file->writeData((quint8*)m_patchData.data(), m_patchData.size());
+}
+
+
+SymbolAddrPatchHook::SymbolAddrPatchHook(HookLinker* parent, HookInfo* info)
+{
+    base(parent, info);
+
+    QString symKey = "sym";
+
+    if (!info->has(symKey))
+        throw new HookExeption(info, "No symbol given");
+
+    bool ok;
+    m_destination = parent->symTable()->get(info->get(symKey), &ok);
+
+    if (!ok)
+        throw new HookExeption(info, QString("Symbol name \"%1\" not found").arg(info->get(symKey)));
+}
+
+void SymbolAddrPatchHook::writeData(FileBase* file, quint32)
+{
+    file->seek(m_address - 0x00100000);
+    file->write32(m_destination);
 }

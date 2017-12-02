@@ -36,6 +36,7 @@ protected:
     HookInfo* m_info;
 };
 
+
 class BranchHook : public Hook
 {
 public:
@@ -61,6 +62,7 @@ private:
     quint32 m_destination;
 };
 
+
 class PatchHook : public Hook
 {
 public:
@@ -70,5 +72,17 @@ public:
 private:
     QByteArray m_patchData;
 };
+
+
+class SymbolAddrPatchHook : public Hook
+{
+public:
+    SymbolAddrPatchHook(HookLinker* parent, HookInfo* info);
+    void writeData(FileBase* file, quint32 extraDataPos);
+
+private:
+    quint32 m_destination;
+};
+
 
 #endif // HOOKS_H
