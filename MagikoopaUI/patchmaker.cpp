@@ -124,7 +124,7 @@ void PatchMaker::loaderCompilerDone(int exitCode)
         m_loaderHookLinker.setSymTable(&m_loaderSymTable);
         m_loaderHookLinker.loadHooks(m_path + "/loader/source");
 
-        quint32 loaderInsertSize = QFile(m_path + "/loader/loader.bin").size() + m_loaderHookLinker.extraDataSize();
+        quint32 loaderInsertSize = m_loaderSymTable.get("__text_end") - m_loaderSymTable.get("__text_start") + m_loaderHookLinker.extraDataSize();
         if (loaderInsertSize > m_loaderMaxSize)
         {
             emit updateStatus("Loader text size exeeds maximum");
