@@ -171,23 +171,60 @@ PatchHook::PatchHook(HookLinker* parent, HookInfo* info)
 {
     base(parent, info);
 
-    if (!info->has("data"))
+    if (info->has("data"))
+    {
+        fromBin = false;
+
+        QString dataStr = info->get("data").toLower();
+        if (dataStr.startsWith("0x"))
+            dataStr = dataStr.mid(2);
+
+        dataStr.replace(' ',  "");
+        dataStr.replace('\t', "");
+
+        m_patchData = QByteArray::fromHex(dataStr.toLatin1());
+    }
+    else if (info->has("src") && info->has("len"))
+    {
+        fromBin = true;
+
+        if (!parent->symTable())
+            throw new HookExeption(info, "Invalid SymTable");
+
+        bool ok;
+        m_src = parent->symTable()->get(info->get("src"), &ok);
+
+        if (!ok)
+            throw new HookExeption(info, "Invalid src symbol");
+
+        m_len = info->getUint("len", &ok);
+
+        if (!ok)
+            throw new HookExeption(info, "Invalid length");
+
+
+    }
+    else
         throw new HookExeption(info, "No patch data given");
-
-    QString dataStr = info->get("data").toLower();
-    if (dataStr.startsWith("0x"))
-        dataStr = dataStr.mid(2);
-
-    dataStr.replace(' ',  "");
-    dataStr.replace('\t', "");
-
-    m_patchData = QByteArray::fromHex(dataStr.toLatin1());
 }
 
 void PatchHook::writeData(FileBase* file, quint32)
 {
-    file->seek(m_address - 0x00100000);
-    file->writeData((quint8*)m_patchData.data(), m_patchData.size());
+    if (!fromBin)
+    {
+        file->seek(m_address - 0x00100000);
+        file->writeData((quint8*)m_patchData.data(), m_patchData.size());
+    }
+    else
+    {
+        file->seek(m_src - 0x00100000);
+        quint8* writeData = new quint8[m_len];
+        file->readData(writeData, m_len);
+
+        file->seek(m_address - 0x00100000);
+        file->writeData(writeData, m_len);
+        delete[] writeData;
+    }
 }
 
 

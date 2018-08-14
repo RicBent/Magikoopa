@@ -71,6 +71,9 @@ public:
 
 private:
     QByteArray m_patchData;
+    quint32 m_src;
+    quint32 m_len;
+    bool fromBin;
 };
 
 

@@ -25,6 +25,10 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(patchMaker, SIGNAL(updateStatus(QString)), ui->statusLabel, SLOT(setText(QString)));
 
     setActionsDisabled(true);
+
+    QString lastWorkingDirectory = settings->value("lastWordkingDirectory").toString();
+    if (!lastWorkingDirectory.isEmpty())
+        setWorkingDirectory(lastWorkingDirectory);
 }
 
 MainWindow::~MainWindow()
@@ -119,12 +123,18 @@ void MainWindow::clearIssues()
 
 void MainWindow::on_actionSet_Working_Directory_triggered()
 {
-    QString newPath = QFileDialog::getExistingDirectory(this, "Select Working Directory...", "", QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+    QString newPath = QFileDialog::getExistingDirectory(this, "Select Working Directory...", settings->value("lastWordkingDirectory", "").toString(), QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
     if (newPath == "")
         return;
 
-    if (patchMaker->setPath(newPath))
+    setWorkingDirectory(newPath);
+}
+
+void MainWindow::setWorkingDirectory(const QString& path)
+{
+    if (patchMaker->setPath(path))
     {
+        settings->setValue("lastWordkingDirectory", path);
         this->setWindowTitle("Magikoopa - " + patchMaker->path());
         setActionsDisabled(false);
     }

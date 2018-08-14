@@ -46,6 +46,8 @@ private:
         Error
     };
 
+    void setWorkingDirectory(const QString& path);
+
     void addIssue(QString text, IssueType type);
     int m_issueCount;
 
