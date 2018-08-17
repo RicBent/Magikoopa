@@ -4,7 +4,6 @@
 #include <QFile>
 #include <QDebug>
 #include <QStringList>
-#include <QDebug>
 #include <QMessageBox>
 #include <QTextStream>
 
@@ -168,8 +167,10 @@ void PatchMaker::compilerDone(int exitCode)
                 << "#endif // NEWCODEINFO_H\n";
             newcodeinfoFile.close();
 
+            qDebug() << QString("Hook size: %1").arg(m_hookLinker.extraDataSize(), 8, 0x10, QChar('0')).toLatin1().data();
+
             QFile newcodeFile(m_path + "/newcode.bin");
-            m_loaderDataOffset = m_newCodeOffset + ((newcodeFile.size() + 0xF) & ~0xF);
+            m_loaderDataOffset = m_newCodeOffset + (((newcodeFile.size() + m_hookLinker.extraDataSize()) + 0xF) & ~0xF);
 
             loaderCompiler->make(m_loaderOffset, m_loaderDataOffset);
         }
@@ -289,9 +290,15 @@ void PatchMaker::fixExheader(quint32 newCodeSize)
 
     exHeader.data.sci.textCodeSetInfo.size = exHeader.data.sci.textCodeSetInfo.physicalRegionSize << 12;
 
+    qDebug() << QString("Data size: %1").arg(exHeader.data.sci.dataCodeSetInfo.physicalRegionSize << 12, 8, 0x10, QChar('0')).toLatin1().data();;
+    qDebug() << QString("BSS size: %1").arg(exHeader.data.sci.bssSize, 8, 0x10, QChar('0')).toLatin1().data();;
+    qDebug() << QString("New code size: %1").arg(newCodeSize, 8, 0x10, QChar('0')).toLatin1().data();;
+
     exHeader.data.sci.dataCodeSetInfo.physicalRegionSize += ((exHeader.data.sci.bssSize + 0xFFF) & ~0xFFF) >> 12 ;
     exHeader.data.sci.dataCodeSetInfo.physicalRegionSize += ((newCodeSize + 0xFFF) & ~0xFFF) >> 12;
     exHeader.data.sci.dataCodeSetInfo.size = exHeader.data.sci.dataCodeSetInfo.physicalRegionSize << 12;
+
+    qDebug() << QString("Final Data size: %1").arg(exHeader.data.sci.dataCodeSetInfo.physicalRegionSize << 12, 8, 0x10, QChar('0')).toLatin1().data();;
 
     exHeader.data.sci.bssSize = 0;
 
