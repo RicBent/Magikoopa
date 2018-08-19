@@ -1,3 +1,10 @@
+/*
+ *  TODO:
+ *   - Do not put loader data segment after newcode
+ *     Currnetly a non-zero loader data segment size will break RWX permissions of newcode hooks and exheader sizes
+ */
+
+
 #include "patchmaker.h"
 
 #include <QDir>
@@ -151,6 +158,7 @@ void PatchMaker::compilerDone(int exitCode)
             m_hookLinker.clear();
             m_hookLinker.setSymTable(&m_symTable);
             m_hookLinker.loadHooks(m_path + "/source");
+            m_hookLinker.loadHooks(m_path + "/hooks");
 
             emit updateStatus("Running Make (Loader)...");
 
@@ -162,7 +170,7 @@ void PatchMaker::compilerDone(int exitCode)
                 << "#define NEWCODEINFO_H\n"
                 << "\n"
                 << QString("#define NEWCODE_OFFSET 0x%1\n").arg(m_newCodeOffset, 8, 0x10, QChar('0'))
-                << QString("#define NEWCODE_SIZE 0x%1\n").arg(QFile(m_path + "/newcode.bin").size() + m_hookLinker.extraDataSize(), 8, 0x10, QChar('0'))
+                << QString("#define NEWCODE_SIZE 0x%1\n").arg(((QFile(m_path + "/newcode.bin").size() + 0xF) & ~0xF) + m_hookLinker.extraDataSize(), 8, 0x10, QChar('0'))
                 << "\n"
                 << "#endif // NEWCODEINFO_H\n";
             newcodeinfoFile.close();
@@ -170,7 +178,7 @@ void PatchMaker::compilerDone(int exitCode)
             qDebug() << QString("Hook size: %1").arg(m_hookLinker.extraDataSize(), 8, 0x10, QChar('0')).toLatin1().data();
 
             QFile newcodeFile(m_path + "/newcode.bin");
-            m_loaderDataOffset = m_newCodeOffset + (((newcodeFile.size() + m_hookLinker.extraDataSize()) + 0xF) & ~0xF);
+            m_loaderDataOffset = m_newCodeOffset + ((newcodeFile.size() + 0xF) & ~0xF);
 
             loaderCompiler->make(m_loaderOffset, m_loaderDataOffset);
         }
@@ -207,7 +215,8 @@ void PatchMaker::insert()
     newCodeFile->open();
 
     quint32 oldCodeSize = codeFile->size();
-    codeFile->resize(loaderDataEnd + m_hookLinker.extraDataSize() - 0x100000);
+    quint32 hookDataEnd = loaderDataEnd + m_hookLinker.extraDataSize();
+    codeFile->resize(((hookDataEnd + 0xFFF) & ~0xFFF) - 0x100000);
 
     // Insert Loader Text
     quint32 loaderTextSize = loaderTextEnd - m_loaderOffset;
@@ -243,6 +252,7 @@ void PatchMaker::insert()
     codeFile->seek(loaderDataStart - 0x100000);
     codeFile->writeData(loaderData, loaderDataSize);
 
+    // Pad out the rest of the page
     quint32 nextPageOffset = (codeFile->pos() + 0xFFF) & ~0xFFF;
     while (codeFile->pos() < nextPageOffset)
         codeFile->write8(0);
@@ -270,6 +280,12 @@ void PatchMaker::insert()
     m_loaderHookLinker.applyTo(codeFile);
 
 
+    // Zero rest of last page
+    codeFile->seek(hookDataEnd);
+    while (codeFile->pos() < codeFile->size())
+        codeFile->write8(0);
+
+
     codeFile->save();
     codeFile->close();
 
@@ -281,7 +297,7 @@ void PatchMaker::insert()
     delete newCodeFile;
 
     emit updateStatus("Fixing Exheader");
-    fixExheader(loaderDataEnd - m_newCodeOffset);
+    fixExheader(loaderDataEnd + m_hookLinker.extraDataSize() - m_newCodeOffset);
 }
 
 void PatchMaker::fixExheader(quint32 newCodeSize)
@@ -291,8 +307,8 @@ void PatchMaker::fixExheader(quint32 newCodeSize)
     exHeader.data.sci.textCodeSetInfo.size = exHeader.data.sci.textCodeSetInfo.physicalRegionSize << 12;
 
     qDebug() << QString("Data size: %1").arg(exHeader.data.sci.dataCodeSetInfo.physicalRegionSize << 12, 8, 0x10, QChar('0')).toLatin1().data();;
-    qDebug() << QString("BSS size: %1").arg(exHeader.data.sci.bssSize, 8, 0x10, QChar('0')).toLatin1().data();;
-    qDebug() << QString("New code size: %1").arg(newCodeSize, 8, 0x10, QChar('0')).toLatin1().data();;
+    qDebug() << QString("BSS size: %1").arg(((exHeader.data.sci.bssSize + 0xFFF) & ~0xFFF), 8, 0x10, QChar('0')).toLatin1().data();;
+    qDebug() << QString("New code size: %1").arg(((newCodeSize + 0xFFF) & ~0xFFF), 8, 0x10, QChar('0')).toLatin1().data();;
 
     exHeader.data.sci.dataCodeSetInfo.physicalRegionSize += ((exHeader.data.sci.bssSize + 0xFFF) & ~0xFFF) >> 12 ;
     exHeader.data.sci.dataCodeSetInfo.physicalRegionSize += ((newCodeSize + 0xFFF) & ~0xFFF) >> 12;
