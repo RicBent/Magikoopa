@@ -13,6 +13,7 @@
 #include <QStringList>
 #include <QMessageBox>
 #include <QTextStream>
+#include <QSettings>
 
 #include "Filesystem/filesystem.h"
 #include "exheader.h"
@@ -129,6 +130,7 @@ void PatchMaker::loaderCompilerDone(int exitCode)
         m_loaderHookLinker.clear();
         m_loaderHookLinker.setSymTable(&m_loaderSymTable);
         m_loaderHookLinker.loadHooks(m_path + "/loader/source");
+        m_loaderHookLinker.loadHooks(m_path + "/loader/hooks");
 
         quint32 loaderInsertSize = m_loaderSymTable.get("__text_end") - m_loaderSymTable.get("__text_start") + m_loaderHookLinker.extraDataSize();
         if (loaderInsertSize > m_loaderMaxSize)
@@ -384,6 +386,46 @@ void PatchMaker::fixExheader(quint32 newCodeSize)
 
     exHeader.save();
 
+    postHook();
+}
+
+void PatchMaker::postHook()
+{
+    QFileInfo fInfo(m_path);
+    QString projName = fInfo.baseName();
+
+    // TODO: Make proper project system
+    QSettings userSetting(m_path + "/" + projName + ".mkproj.user", QSettings::IniFormat);
+    userSetting.beginGroup("CopyPaths");
+    m_codeCopyPath = userSetting.value("Code", "").toString();
+    m_exheaderCopyPath = userSetting.value("Exheader", "").toString();
+    userSetting.endGroup();
+
+    if (!m_codeCopyPath.isEmpty())
+    {
+        QFile dest(m_codeCopyPath);
+        if (dest.exists())
+            dest.remove();
+
+        QFile codeFile(m_path + "/code.bin");
+        codeFile.copy(m_codeCopyPath);
+    }
+
+    if (!m_exheaderCopyPath.isEmpty())
+    {
+        QFile dest(m_exheaderCopyPath);
+        if (dest.exists())
+            dest.remove();
+
+        QFile exheaderFile(m_path + "/exheader.bin");
+        exheaderFile.copy(m_exheaderCopyPath);
+    }
+
+    allDone();
+}
+
+void PatchMaker::allDone()
+{
     emit setBusy(false);
     emit updateStatus("All done");
 }

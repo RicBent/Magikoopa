@@ -47,6 +47,8 @@ private:
 
     void insert();
     void fixExheader(quint32 newCodeSize);
+    void postHook();
+    void allDone();
 
     static quint32 makeBranchOpcode(quint32 src, quint32 dest, bool link);
 
@@ -67,6 +69,9 @@ private:
     quint32 m_loaderMaxSize;
     quint32 m_newCodeOffset;
     quint32 m_loaderDataOffset;
+
+    QString m_codeCopyPath;
+    QString m_exheaderCopyPath;
 };
 
 #endif // PATCHMAKER_H

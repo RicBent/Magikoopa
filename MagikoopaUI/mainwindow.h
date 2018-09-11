@@ -48,7 +48,7 @@ private:
 
     void setWorkingDirectory(const QString& path);
 
-    void addIssue(QString text, IssueType type);
+    void addIssue(QString text, IssueType type, bool removeLabel = true);
     int m_issueCount;
 
     void clearIssues();

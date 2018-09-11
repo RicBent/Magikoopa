@@ -76,10 +76,15 @@ void MainWindow::appendOutput(const QString& catergory, const QString& text, boo
             addIssue(logText, Error);
             break;
         }
+        else if (lowerLine.contains("undefined reference to"))
+        {
+            addIssue(logText, Error, false);
+            break;
+        }
     }
 }
 
-void MainWindow::addIssue(QString text, IssueType type)
+void MainWindow::addIssue(QString text, IssueType type, bool removeLabel)
 {
     QString iconPath = QCoreApplication::applicationDirPath() + "/magikoopa_data/icons/";
     if (type == Warning) iconPath += "warning.png";
@@ -101,7 +106,7 @@ void MainWindow::addIssue(QString text, IssueType type)
         if (ok) column = column_;
     }
 
-    QString message = text.mid(text.indexOf(' ', index+1));
+    QString message = text.mid(removeLabel ? text.indexOf(' ', index+1) : index+1);
 
     QListWidgetItem* item = new QListWidgetItem(QIcon(iconPath), QString("%1\n%2, Line %3").arg(message).arg(path).arg(line));
     item->setData(Qt::UserRole, path);
